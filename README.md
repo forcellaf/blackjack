@@ -17,7 +17,7 @@ A fully functional Blackjack game built with C++ using the MVC (Model-View-Contr
 ## Project Structure
 
 ```
-raylib_test/
+blackjack_cpp/
 ├── CMakeLists.txt           # CMake build configuration
 ├── README.md                # This file
 ├── include/
