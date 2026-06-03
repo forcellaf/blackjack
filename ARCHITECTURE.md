@@ -4,12 +4,15 @@
 
 1. [Overview](#overview)
 2. [MVC Architecture](#mvc-architecture)
-3. [Object-Oriented Design](#object-oriented-design)
-4. [Component Breakdown](#component-breakdown)
-5. [Class Hierarchy](#class-hierarchy)
-6. [Design Patterns](#design-patterns)
-7. [Game Flow](#game-flow)
-8. [Extension Guidelines](#extension-guidelines)
+3. [Application State Management](#application-state-management)
+4. [Object-Oriented Design](#object-oriented-design)
+5. [Component Breakdown](#component-breakdown)
+6. [Class Hierarchy](#class-hierarchy)
+7. [Design Patterns](#design-patterns)
+8. [Game Flow](#game-flow)
+9. [Save/Load System](#saveload-system)
+10. [Menu System](#menu-system)
+11. [Extension Guidelines](#extension-guidelines)
 
 ---
 
@@ -24,6 +27,8 @@ This Blackjack game is built using C++ with the **Model-View-Controller (MVC)** 
 - **Type Safety**: Strong typing with enums for game states and card properties
 - **Memory Management**: Smart pointers (`std::shared_ptr`) for automatic memory management
 - **Single Responsibility**: Each class has a single, well-defined purpose
+- **Persistent State**: Save/load system with multiple save slots
+- **Main Menu**: User-friendly menu navigation system
 
 ---
 
@@ -42,10 +47,12 @@ The Model-View-Controller pattern divides an application into three interconnect
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         Game (Singleton)                     │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  │
-│  │    Model      │  │     View      │  │  Controller    │  │
-│  │  (GameModel)  │  │  (GameView)   │  │(GameController)│  │
-│  └───────────────┘  └───────────────┘  └───────────────┘  │
+│                                                              │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────┐ │
+│  │ MenuModel        │  │   MenuView       │  │MenuCtrlr  │ │
+│  ├──────────────────┤  ├──────────────────┤  ├───────────┤ │
+│  │ GameModel        │  │   GameView       │  │GameCtrlr  │ │
+│  └──────────────────┘  └──────────────────┘  └───────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,11 +65,33 @@ User Input → Controller → Model Updates → View Renders → Display
                     (Loop continues)
 ```
 
-1. **Controller** receives keyboard input (H, S, SPACE)
-2. **Controller** calls appropriate **Model** methods (`playerHit()`, `playerStand()`)
-3. **Model** updates game state (card values, game status)
+1. **Controller** receives keyboard input (Menu: arrows, Enter; Game: H, S, SPACE)
+2. **Controller** calls appropriate **Model** methods
+3. **Model** updates game state
 4. **Game** loop triggers **View** to render current state
-5. **View** draws cards, UI, and messages to screen
+5. **View** draws UI elements to screen
+
+---
+
+## Application State Management
+
+The game manages two distinct application states through the `AppState` enum:
+
+```cpp
+enum class AppState {
+    MENU,   // Main menu navigation
+    GAME,   // Active gameplay
+    QUIT    // Application exit
+};
+```
+
+### State Transitions
+
+- **MENU → GAME**: User selects "New Game" or loads a saved game
+- **GAME → MENU**: User presses ESC during gameplay
+- **MENU/GAME → QUIT**: User selects "Quit" from menu
+
+The `Game` class provides `switchToMenu()` and `switchToGame()` methods to handle component activation/deactivation during state transitions.
 
 ---
 
@@ -95,11 +124,16 @@ Entity (base)
     ├── Model (abstract base)
     │   ├── Deck
     │   ├── Hand
-    │   └── GameModel
+    │   ├── GameModel
+    │   ├── MenuModel
+    │   ├── SaveManager
+    │   └── SaveData (struct)
     ├── View (abstract base)
-    │   └── GameView
+    │   ├── GameView
+    │   └── MenuView
     └── Controller (abstract base)
-        └── GameController
+        ├── GameController
+        └── MenuController
 ```
 
 #### 3. Polymorphism
@@ -165,6 +199,7 @@ class Entity {
 - Window initialization and management
 - Component registration (models, views, controllers)
 - Main game loop coordination
+- Application state management
 - Delta time calculation
 
 **Key Methods**:
@@ -173,16 +208,10 @@ class Entity {
 - `update()` - Update all components
 - `render()` - Render all views
 - `shutdown()` - Clean up resources
+- `switchToMenu()` - Switch to menu state
+- `switchToGame()` - Switch to game state
 
-**Usage**:
-```cpp
-auto& game = Game::getInstance();
-game.init(1024, 768, "Blackjack");
-game.addModel(gameModel);
-game.addView(gameView);
-game.addController(gameController);
-game.run();
-```
+---
 
 ### Model Components
 
@@ -212,19 +241,9 @@ enum class Rank {
 };
 ```
 
-**Special Behavior**:
-- Face cards (J, Q, K) return value 10
-- Ace returns value 11 (Hand class handles 1/11 adjustment)
-
 #### Deck (`include/models/Deck.hpp`)
 
 **Purpose**: Manage a standard 52-card deck
-
-**Responsibilities**:
-- Create full 52-card deck
-- Shuffle using Fisher-Yates algorithm
-- Deal cards
-- Track remaining cards
 
 **Key Methods**:
 ```cpp
@@ -237,26 +256,6 @@ void reset();                         // Rebuild and reshuffle
 
 **Purpose**: Manage a player's or dealer's hand
 
-**Responsibilities**:
-- Store collection of cards
-- Calculate hand value following Blackjack rules
-- Detect Blackjack and bust conditions
-
-**Blackjack Rules Implemented**:
-```cpp
-int getValue() const {
-    int value = sumAllCards();        // Sum card values
-    int aceCount = countAces();
-
-    // Adjust for aces: count as 1 instead of 11 if busting
-    while (value > 21 && aceCount > 0) {
-        value -= 10;                  // Convert Ace from 11 to 1
-        aceCount--;
-    }
-    return value;
-}
-```
-
 **Detection Methods**:
 - `isBusted()` - Value exceeds 21
 - `isBlackjack()` - Exactly 21 with 2 cards
@@ -265,12 +264,6 @@ int getValue() const {
 #### GameModel (`include/models/GameModel.hpp`)
 
 **Purpose**: Manage overall game state and logic
-
-**Responsibilities**:
-- Track game state (betting, playing, game over)
-- Manage player and dealer hands
-- Implement Blackjack game rules
-- Determine winners
 
 **Game States**:
 ```cpp
@@ -293,6 +286,83 @@ enum class GameState {
 - `playerStand()` - End player's turn
 - `dealerPlay()` - Dealer plays (hits to 17)
 - `determineWinner()` - Calculate round result
+- `saveGame(int slot)` - Save current game state
+- `loadGame(int slot)` - Load game from slot
+- `getWins()`, `getLosses()`, `getPushes()` - Statistics getters
+- `getWinRate()` - Calculate win percentage
+
+#### MenuModel (`include/models/MenuModel.hpp`)
+
+**Purpose**: Manage main menu state and navigation
+
+**Menu States**:
+```cpp
+enum class MenuState {
+    MAIN_MENU,         // Main menu options
+    SAVE_SLOT_SELECT,  // Selecting save slot
+    LOAD_SLOT_SELECT,  // Selecting load slot
+    SETTINGS,          // Settings menu
+    NONE               // No active menu
+};
+```
+
+**Menu Options**:
+```cpp
+enum class MenuOption {
+    NEW_GAME,
+    LOAD_GAME,
+    SAVE_GAME,
+    SETTINGS,
+    QUIT
+};
+```
+
+**Key Methods**:
+- `navigateUp()`, `navigateDown()` - Move selection
+- `selectOption()` - Process selection
+- `goBack()` - Return to previous menu
+- `getSaveSlotInfo()` - Get save slot metadata
+
+#### SaveManager (`include/models/SaveManager.hpp`)
+
+**Purpose**: Handle file I/O for save/load operations
+
+**Key Features**:
+- Support for 5 save slots
+- Auto-save functionality
+- Save slot validation
+- Timestamp tracking
+
+**Key Methods**:
+```cpp
+bool saveToSlot(int slot, const SaveData& data);
+bool loadFromSlot(int slot, SaveData& data);
+bool slotExists(int slot) const;
+bool autoSave(const SaveData& data);
+std::vector<SaveData> getAllSlotInfo() const;
+```
+
+#### SaveData (`include/models/SaveData.hpp`)
+
+**Purpose**: Structure for serializing game state
+
+**Data Structure**:
+```cpp
+struct SaveData {
+    int version;              // Save format version
+    std::time_t saveTime;     // Timestamp
+    int wins, losses, pushes; // Statistics
+    bool inProgress;          // Game in progress flag
+    SerializedHand playerHand; // Player's cards
+    SerializedHand dealerHand; // Dealer's cards
+    int deckCardCount;         // Remaining cards
+
+    std::string toJSON() const;
+    static SaveData fromJSON(const std::string& json);
+};
+```
+
+---
 
 ### View Components
 
@@ -308,13 +378,6 @@ enum class GameState {
 
 **Purpose**: Render the Blackjack game
 
-**Responsibilities**:
-- Draw game table (felt green background)
-- Render cards with suits and colors
-- Display player/dealer hands
-- Show scores and messages
-- Draw controls panel
-
 **Rendering Hierarchy**:
 ```
 render()
@@ -326,10 +389,20 @@ render()
 └── renderControls()        // Controls help
 ```
 
-**Card Rendering**:
-- Red cards: Hearts (♥) and Diamonds (♦)
-- Black cards: Clubs (♣) and Spades (♠)
-- Hidden card: Show back pattern
+#### MenuView (`include/views/MenuView.hpp`)
+
+**Purpose**: Render the main menu
+
+**Rendering Hierarchy**:
+```
+render()
+├── renderBackground()      // Felt green with decorative cards
+├── renderTitle()           // "BLACKJACK" title with gold effect
+├── renderOptions()         // Menu options with selection
+└── renderFooter()          // Control hints
+```
+
+---
 
 ### Controller Components
 
@@ -343,12 +416,7 @@ render()
 
 #### GameController (`include/controllers/GameController.hpp`)
 
-**Purpose**: Handle keyboard input
-
-**Responsibilities**:
-- Process key presses based on game state
-- Call appropriate Model methods
-- Manage state transitions
+**Purpose**: Handle keyboard input during gameplay
 
 **Input Mapping**:
 ```
@@ -361,6 +429,28 @@ render()
 └─────────────────┴──────────────────────────────┘
 ```
 
+#### MenuController (`include/controllers/MenuController.hpp`)
+
+**Purpose**: Handle menu navigation input
+
+**Input Mapping**:
+```
+┌─────────────────┬──────────────────────────────┐
+│ Action          │ Keys                         │
+├─────────────────┼──────────────────────────────┤
+│ Navigate        │ Arrow Up/Down                │
+│ Select          │ Enter                        │
+│ Go Back         │ ESC                          │
+│ Return to Menu  │ ESC (during game)            │
+└─────────────────┴──────────────────────────────┘
+```
+
+**Key Methods**:
+- `shouldStartNewGame()` - Check if new game requested
+- `shouldQuit()` - Check if exit requested
+- `shouldLoadGame()` - Check if load requested
+- `getSelectedSlot()` - Get selected save slot
+
 ---
 
 ## Class Hierarchy
@@ -371,39 +461,20 @@ Entity
 ├── Model
 │   ├── Deck
 │   ├── Hand
-│   └── GameModel
+│   ├── GameModel
+│   ├── MenuModel
+│   └── SaveManager
 │
 ├── View
-│   └── GameView
+│   ├── GameView
+│   └── MenuView
 │
 └── Controller
-    └── GameController
+    ├── GameController
+    └── MenuController
 
 Card (independent class, used by Deck and Hand)
-```
-
-### Class Relationships
-
-```
-┌─────────────┐       uses        ┌─────────────┐
-│ GameModel   │──────────────────>│     Deck    │
-└─────────────┘                   └─────────────┘
-       │                                  │
-       │ contains                         │ contains
-       ▼                                  ▼
-┌─────────────┐                   ┌─────────────┐
-│    Hand     │<──────────────────│    Card     │
-└─────────────┘   (shared_ptr)    └─────────────┘
-       ▲
-       │           observes
-       │                   ┌─────────────┐
-       └──────────────────│  GameView   │
-                           └─────────────┘
-                                  ▲
-                                  │
-                    ┌─────────────┴─────────────┐
-                    │       GameController       │
-                    └───────────────────────────┘
+SaveData (independent struct, used by SaveManager)
 ```
 
 ---
@@ -412,133 +483,72 @@ Card (independent class, used by Deck and Hand)
 
 ### 1. Singleton Pattern
 
-**Game** class uses singleton pattern to ensure only one game instance exists:
-
-```cpp
-class Game {
-public:
-    static Game& getInstance() {
-        static Game instance;
-        return instance;
-    }
-private:
-    Game() = default;
-    Game(const Game&) = delete;
-    Game& operator=(const Game&) = delete;
-};
-```
-
-**Benefits**:
-- Single point of access for game functionality
-- Prevents multiple window creation
-- Simplifies global state management
+**Game** class uses singleton pattern to ensure only one game instance exists.
 
 ### 2. Observer Pattern (Implicit)
 
-Views observe Models through the Game loop:
+Views observe Models through the Game loop.
 
-```cpp
-void Game::render() {
-    for (auto& view : m_views) {
-        if (view->isActive()) {
-            view->render();  // View reads current Model state
-        }
-    }
-}
-```
+### 3. State Pattern
 
-### 3. Strategy Pattern (Implicit)
+**Application States**: MENU, GAME, QUIT
+**Game States**: BETTING, PLAYER_TURN, DEALER_TURN, etc.
+**Menu States**: MAIN_MENU, SAVE_SLOT_SELECT, etc.
 
-Different strategies for different game states:
+### 4. Strategy Pattern (Implicit)
 
-```cpp
-void GameController::handleKeyPress(int key) {
-    switch (m_model->getState()) {
-        case GameState::BETTING:
-            processBettingState(key);
-            break;
-        case GameState::PLAYER_TURN:
-            processPlayerTurn(key);
-            break;
-        // ...
-    }
-}
-```
+Different controllers handle input differently based on application state.
 
-### 4. Template Method Pattern
+### 5. Template Method Pattern
 
-Base classes define algorithm structure, derived classes implement specifics:
-
-```cpp
-// Base class defines template
-class View {
-public:
-    virtual void init() {}     // Hook for subclasses
-    virtual void render() = 0; // Must implement
-};
-
-// Derived class implements
-class GameView : public View {
-public:
-    void init() override {
-        // Setup view resources
-    }
-    void render() override {
-        // Render specific content
-    }
-};
-```
+Base classes define algorithm structure, derived classes implement specifics.
 
 ---
 
 ## Game Flow
 
-### Initialization Sequence
+### Application Startup Sequence
 
 ```
 1. main() starts
    ↓
-2. Game::getInstance() called
+2. Create all MVC components (menu and game)
    ↓
-3. game.init(width, height, title)
-   ├── InitWindow() (raylib)
-   ├── Create GameModel
-   ├── Create GameView
-   ├── Create GameController
-   └── Call init() on each component
+3. Initialize game with Game::getInstance()
    ↓
-4. game.run() enters main loop
+4. Switch to MENU state
+   ↓
+5. Enter main loop
 ```
 
-### Main Game Loop
+### Main Menu Flow
 
 ```
-while (!WindowShouldClose() && running) {
-    deltaTime = GetFrameTime();
-
-    // 1. Handle Input
-    for each controller:
-        controller.handleInput()
-        controller.update(deltaTime)
-
-    // 2. Update Models
-    for each model:
-        model.update(deltaTime)
-
-    // 3. Update Views (animations)
-    for each view:
-        view.update(deltaTime)
-
-    // 4. Render
-    BeginDrawing()
-    ClearBackground()
-    for each view:
-        view.render()
-    EndDrawing()
-}
+┌─────────────────────────────────────┐
+│           MAIN MENU                 │
+│  ┌───────────────────────────────┐ │
+│  │  New Game  ←──────────────────│ │
+│  │  Load Game                    │ │
+│  │  Save Game                    │ │
+│  │  Settings                     │ │
+│  │  Quit                         │ │
+│  └───────────────────────────────┘ │
+└─────────────────────────────────────┘
+           │
+    ┌──────┴──────┐
+    ▼             ▼
+New Game      Load Game
+    │             │
+    ▼             ▼
+Reset &    Load from
+  Start     Save Slot
+    │             │
+    └──────┬──────┘
+           ▼
+      GAME STATE
 ```
 
-### Round Sequence
+### Gameplay Sequence
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -593,157 +603,191 @@ GAME_OVER DEALER_TURN
            ▼
       GAME_OVER
       Show result
-      Wait for SPACE
+      Auto-save
 ```
+
+### Return to Menu
+
+```
+┌─────────────────┐
+│  Playing Game   │
+│                 │
+│  Press ESC      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Switch to      │
+│  MENU state     │
+│                 │
+│  Show Main Menu │
+└─────────────────┘
+```
+
+---
+
+## Save/Load System
+
+### Save Data Structure
+
+Each save file contains:
+- **Version**: Save format version for compatibility
+- **Timestamp**: When the save was created
+- **Statistics**: Wins, losses, pushes
+- **Game State**: Whether a game is in progress
+- **Player Hand**: Serialized card data
+- **Dealer Hand**: Serialized card data
+- **Deck State**: Number of remaining cards
+
+### Save Operations
+
+1. **Manual Save**: User selects "Save Game" from menu
+2. **Auto-Save**: Automatically saves after each completed round to slot 1
+3. **Quick Save**: Can be bound to a key (future enhancement)
+
+### Load Operations
+
+1. **Menu Load**: User selects "Load Game" from menu
+2. **Slot Selection**: User chooses which save slot to load
+3. **State Restoration**: Game restores cards, statistics, and deck state
+
+### File Format
+
+Saves are stored as JSON files in the `saves/` directory:
+```
+saves/
+├── save_slot_1.json
+├── save_slot_2.json
+├── save_slot_3.json
+├── save_slot_4.json
+└── save_slot_5.json
+```
+
+---
+
+## Menu System
+
+### Menu Navigation
+
+The menu system supports nested navigation:
+
+```
+Main Menu
+├── New Game → Starts game
+├── Load Game → Save Slot Select → Load from slot
+├── Save Game → Save Slot Select → Save to slot
+├── Settings → Settings Menu (future)
+└── Quit → Exit application
+```
+
+### Visual Design
+
+- **Background**: Felt green with decorative card patterns
+- **Title**: Gold "BLACKJACK" with shadow effect
+- **Selection**: Highlighted with golden border and glow
+- **Indicators**: Arrow pointer for selected item
+- **Footer**: Control hints at bottom
 
 ---
 
 ## Extension Guidelines
 
-### Adding New Card Games
+### Adding New Menu Options
 
-1. **Create new Model classes**:
+1. **Update MenuOption enum**:
 ```cpp
-class PokerModel : public Model {
-    // Poker-specific game logic
+enum class MenuOption {
+    NEW_GAME,
+    LOAD_GAME,
+    SAVE_GAME,
+    SETTINGS,
+    MY_NEW_FEATURE,  // Add here
+    QUIT
 };
 ```
 
-2. **Create new View classes**:
+2. **Update MenuModel**:
 ```cpp
-class PokerView : public View {
-    void render() override {
-        // Poker-specific rendering
+std::vector<std::string> MenuModel::getMainMenuOptions() const {
+    return {
+        "New Game",
+        "Load Game",
+        "Save Game",
+        "Settings",
+        "My New Feature",  // Add here
+        "Quit"
+    };
+}
+```
+
+3. **Handle in MenuController**:
+```cpp
+void MenuController::executeMainMenuSelection() {
+    switch (selectedOption) {
+        // ... existing cases ...
+        case MenuOption::MY_NEW_FEATURE:
+            // Handle new feature
+            break;
     }
+}
+```
+
+### Adding New Save Data
+
+1. **Add to SaveData structure**:
+```cpp
+struct SaveData {
+    // ... existing fields ...
+    int myNewData;  // Add here
 };
 ```
 
-3. **Create new Controller classes**:
+2. **Update serialization**:
 ```cpp
-class PokerController : public Controller {
-    void handleInput() override {
-        // Poker-specific input handling
-    }
-};
+std::string SaveData::toJSON() const {
+    // ... existing code ...
+    json << "  \"myNewData\": " << myNewData << ",\n";
+}
 ```
 
-4. **Register with Game**:
+3. **Load from save**:
 ```cpp
-auto pokerModel = std::make_shared<PokerModel>();
-auto pokerView = std::make_shared<PokerView>(pokerModel);
-auto pokerController = std::make_shared<PokerController>(pokerModel);
-
-game.addModel(pokerModel);
-game.addView(pokerView);
-game.addController(pokerController);
-```
-
-### Adding Features to Blackjack
-
-**Add betting system:**
-```cpp
-class GameModel {
-private:
-    int m_balance;
-    int m_currentBet;
-
-public:
-    void placeBet(int amount);
-    void payout(GameState result);
-};
-```
-
-**Add card counting statistics:**
-```cpp
-class GameModel {
-private:
-    std::map<Rank, int> m_cardsSeen;
-
-public:
-    float getTrueCount();
-    float getRunningCount();
-};
-```
-
-**Add animations:**
-```cpp
-class GameView : public View {
-private:
-    float m_cardAnimationProgress;
-
-public:
-    void update(float deltaTime) override {
-        m_cardAnimationProgress += deltaTime * 2.0f;
-    }
-
-    void renderCard(std::shared_ptr<Card> card, int x, int y) {
-        int animatedX = lerp(startX, endX, m_cardAnimationProgress);
-        // Render at animated position
-    }
-};
-```
-
-### Adding Sound Effects
-
-1. **Create SoundManager class**:
-```cpp
-class SoundManager : public Entity {
-private:
-    Sound m_cardFlipSound;
-    Sound m_chipSound;
-
-public:
-    void init() override;
-    void playCardFlip();
-    void playChipSound();
-};
-```
-
-2. **Integrate with Game**:
-```cpp
-class GameModel {
-    void playerHit() {
-        m_soundManager->playCardFlip();
-        m_playerHand->addCard(m_deck->drawCard());
-    }
-};
-```
-
-### Adding Multiplayer
-
-1. **Create NetworkManager**:
-```cpp
-class NetworkManager : public Entity {
-public:
-    void sendGameState(const GameState& state);
-    GameState receiveOpponentMove();
-};
-```
-
-2. **Extend GameModel**:
-```cpp
-class GameModel {
-private:
-    bool m_isMultiplayer;
-    std::shared_ptr<NetworkManager> m_network;
-
-public:
-    void playerHit() {
-        // Local game
-        if (!m_isMultiplayer) {
-            m_playerHand->addCard(m_deck->drawCard());
-        }
-        // Network game
-        else {
-            m_network->sendMove(HIT);
-        }
-    }
-};
+SaveData SaveData::fromJSON(const std::string& json) {
+    // Parse myNewData from JSON
+}
 ```
 
 ---
 
 ## Technical Details
+
+### Build System
+
+**Windows (build.bat)**:
+```batch
+1. Build raylib library with gcc (C99)
+2. Compile game sources with g++ (C++17)
+3. Link with raylib static library
+```
+
+**Linux/macOS (build.sh)**:
+```bash
+1. Compile raylib C files
+2. Create static library
+3. Compile and link game
+```
+
+### Compiler Flags
+
+**Raylib (C)**:
+```bash
+gcc -c -std=c99 -w -O2 -DPLATFORM_DESKTOP
+```
+
+**Game (C++)**:
+```bash
+g++ -c -std=c++17 -w -O2
+```
 
 ### Memory Management
 
@@ -753,88 +797,9 @@ std::shared_ptr<Deck> m_deck;           // Shared ownership
 std::shared_ptr<Card> drawCard();       // Transfer ownership
 ```
 
-**Benefits**:
-- Automatic memory cleanup
-- No manual delete needed
-- Reference counting for shared resources
-
 ### Thread Safety
 
 **Current Implementation**: Single-threaded
-
-**Future Enhancement**:
-```cpp
-class Game {
-private:
-    std::mutex m_stateMutex;
-
-public:
-    void update() {
-        std::lock_guard<std::mutex> lock(m_stateMutex);
-        // Update game state
-    }
-};
-```
-
-### Performance Considerations
-
-**Optimization Techniques Used**:
-1. **Object Pooling** (potential enhancement):
-```cpp
-class CardPool {
-    std::vector<std::shared_ptr<Card>> m_availableCards;
-public:
-    std::shared_ptr<Card> acquire();
-    void release(std::shared_ptr<Card> card);
-};
-```
-
-2. **Batch Rendering** (potential enhancement):
-```cpp
-void GameView::render() {
-    // Collect all draw commands
-    // Sort by texture/depth
-    // Batch similar draws
-}
-```
-
----
-
-## Build System
-
-### Compilation Structure
-
-```
-external/raylib/src/*.c     → obj_raylib/*.o     (C files)
-src/**/*.cpp                → obj_game/*.o       (C++ files)
-                             ↓
-                         Linking
-                             ↓
-                      RaylibGame.exe
-```
-
-### Compiler Flags
-
-**Raylib (C)**:
-```bash
-gcc -c -std=c11 -w -O2 \
-    -Iexternal/raylib/src \
-    -Iexternal/raylib/src/external/glfw/include \
-    -DPLATFORM_DESKTOP -DPLATFORM_WINDOWS
-```
-
-**Game (C++)**:
-```bash
-g++ -c -std=c++17 -w -O2 \
-    -Iinclude -Iexternal/raylib/src
-```
-
-**Linking**:
-```bash
-g++ -std=c++17 -o RaylibGame.exe \
-    obj_game/*.o obj_raylib/*.o \
-    -lopengl32 -lgdi32 -lwinmm
-```
 
 ---
 
@@ -844,8 +809,10 @@ This Blackjack game demonstrates a clean, maintainable architecture using:
 
 - **MVC Pattern**: Clear separation of concerns
 - **OOP Principles**: Encapsulation, inheritance, polymorphism
-- **Design Patterns**: Singleton, Template Method, Strategy
+- **Design Patterns**: Singleton, State, Strategy, Template Method
 - **Modern C++**: Smart pointers, enums, standard library
+- **Persistent State**: Save/load system with file I/O
+- **User Interface**: Main menu with navigation
 
 The architecture is designed to be:
 1. **Understandable**: Clear naming and organization
@@ -855,7 +822,7 @@ The architecture is designed to be:
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: June 2, 2026
+**Document Version**: 2.0
+**Last Updated**: June 3, 2026
 **Project**: Blackjack Game with Raylib
 **Language**: C++17

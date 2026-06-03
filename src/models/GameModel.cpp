@@ -1,6 +1,7 @@
 #include "models/GameModel.hpp"
 #include <sstream>
 #include <iomanip>
+#include <cstring>
 
 namespace game {
     namespace models {
@@ -18,6 +19,8 @@ namespace game {
             m_deck = std::make_shared<Deck>("MainDeck");
             m_playerHand = std::make_shared<Hand>("PlayerHand");
             m_dealerHand = std::make_shared<Hand>("DealerHand");
+            m_saveManager = std::make_shared<SaveManager>("saves");
+            m_saveManager->init();
         }
 
         void GameModel::init() {
@@ -159,6 +162,95 @@ namespace game {
                 m_deck->reset();
                 m_message = "Deck reshuffled!";
             }
+        }
+
+        bool GameModel::saveGame(int slot) {
+            SaveData data;
+
+            // Save statistics
+            data.wins = m_wins;
+            data.losses = m_losses;
+            data.pushes = m_pushes;
+
+            // Save current game state if in progress
+            if (m_state == GameState::PLAYER_TURN || m_state == GameState::DEALER_TURN) {
+                data.inProgress = true;
+                data.deckCardCount = m_deck->getCardCount();
+
+                // Serialize player hand
+                for (const auto& card : m_playerHand->getCards()) {
+                    data.playerHand.cards.push_back(
+                        SerializedCard(static_cast<int>(card->getSuit()),
+                                      static_cast<int>(card->getRank()))
+                    );
+                }
+
+                // Serialize dealer hand
+                for (const auto& card : m_dealerHand->getCards()) {
+                    data.dealerHand.cards.push_back(
+                        SerializedCard(static_cast<int>(card->getSuit()),
+                                      static_cast<int>(card->getRank()))
+                    );
+                }
+            } else {
+                data.inProgress = false;
+            }
+
+            return m_saveManager->saveToSlot(slot, data);
+        }
+
+        bool GameModel::loadGame(int slot) {
+            SaveData data;
+
+            if (!m_saveManager->loadFromSlot(slot, data)) {
+                return false;
+            }
+
+            // Load statistics
+            m_wins = data.wins;
+            m_losses = data.losses;
+            m_pushes = data.pushes;
+
+            // If there's a game in progress, restore it
+            if (data.inProgress) {
+                // Clear current hands
+                m_playerHand->clear();
+                m_dealerHand->clear();
+
+                // Restore deck
+                m_deck->reset();
+                for (int i = 0; i < data.deckCardCount; i++) {
+                    m_deck->drawCard(); // Remove cards to match saved state
+                }
+
+                // Restore player hand
+                for (const auto& serializedCard : data.playerHand.cards) {
+                    auto card = std::make_shared<Card>(
+                        static_cast<Suit>(serializedCard.suit),
+                        static_cast<Rank>(serializedCard.rank)
+                    );
+                    m_playerHand->addCard(card);
+                }
+
+                // Restore dealer hand
+                for (const auto& serializedCard : data.dealerHand.cards) {
+                    auto card = std::make_shared<Card>(
+                        static_cast<Suit>(serializedCard.suit),
+                        static_cast<Rank>(serializedCard.rank)
+                    );
+                    m_dealerHand->addCard(card);
+                }
+
+                updateScores();
+                m_state = GameState::PLAYER_TURN;
+                m_message = "Game loaded. Hit (H) or Stand (S)?";
+            } else {
+                // No game in progress, reset to betting state
+                reset();
+                m_message = "Game loaded. Press SPACE to start";
+            }
+
+            return true;
         }
 
     } // namespace models

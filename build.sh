@@ -30,8 +30,13 @@ GAME_SOURCES="$GAME_SOURCES src/models/Card.cpp"
 GAME_SOURCES="$GAME_SOURCES src/models/Deck.cpp"
 GAME_SOURCES="$GAME_SOURCES src/models/Hand.cpp"
 GAME_SOURCES="$GAME_SOURCES src/models/GameModel.cpp"
+GAME_SOURCES="$GAME_SOURCES src/models/MenuModel.cpp"
+GAME_SOURCES="$GAME_SOURCES src/models/SaveData.cpp"
+GAME_SOURCES="$GAME_SOURCES src/models/SaveManager.cpp"
 GAME_SOURCES="$GAME_SOURCES src/views/GameView.cpp"
+GAME_SOURCES="$GAME_SOURCES src/views/MenuView.cpp"
 GAME_SOURCES="$GAME_SOURCES src/controllers/GameController.cpp"
+GAME_SOURCES="$GAME_SOURCES src/controllers/MenuController.cpp"
 GAME_SOURCES="$GAME_SOURCES src/main.cpp"
 
 for src in $GAME_SOURCES; do

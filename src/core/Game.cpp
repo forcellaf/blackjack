@@ -113,5 +113,81 @@ namespace game {
             m_controllers.push_back(controller);
         }
 
+        void Game::switchToMenu() {
+            m_appState = AppState::MENU;
+
+            // Deactivate game components
+            for (auto& model : m_models) {
+                if (model->getName() == "GameModel") {
+                    model->setActive(false);
+                }
+            }
+            for (auto& view : m_views) {
+                if (view->getName() == "GameView") {
+                    view->setActive(false);
+                }
+            }
+            for (auto& controller : m_controllers) {
+                if (controller->getName() == "GameController") {
+                    controller->setActive(false);
+                }
+            }
+
+            // Activate menu components
+            for (auto& model : m_models) {
+                if (model->getName() == "MenuModel") {
+                    model->setActive(true);
+                }
+            }
+            for (auto& view : m_views) {
+                if (view->getName() == "MenuView") {
+                    view->setActive(true);
+                }
+            }
+            for (auto& controller : m_controllers) {
+                if (controller->getName() == "MenuController") {
+                    controller->setActive(true);
+                }
+            }
+        }
+
+        void Game::switchToGame() {
+            m_appState = AppState::GAME;
+
+            // Deactivate menu components
+            for (auto& model : m_models) {
+                if (model->getName() == "MenuModel") {
+                    model->setActive(false);
+                }
+            }
+            for (auto& view : m_views) {
+                if (view->getName() == "MenuView") {
+                    view->setActive(false);
+                }
+            }
+            for (auto& controller : m_controllers) {
+                if (controller->getName() == "MenuController") {
+                    controller->setActive(false);
+                }
+            }
+
+            // Activate game components
+            for (auto& model : m_models) {
+                if (model->getName() == "GameModel") {
+                    model->setActive(true);
+                }
+            }
+            for (auto& view : m_views) {
+                if (view->getName() == "GameView") {
+                    view->setActive(true);
+                }
+            }
+            for (auto& controller : m_controllers) {
+                if (controller->getName() == "GameController") {
+                    controller->setActive(true);
+                }
+            }
+        }
+
     } // namespace core
 } // namespace game

@@ -7,12 +7,16 @@ A fully functional Blackjack game built with C++ using the MVC (Model-View-Contr
 - **MVC Architecture**: Clean separation of concerns with Models, Views, and Controllers
 - **Object-Oriented Design**: Full OOP implementation with inheritance, polymorphism, and encapsulation
 - **Raylib Graphics**: Smooth rendering with raylib game library
+- **Main Menu System**: Beautiful main menu with save/load functionality
+- **Save/Load System**: Persistent game state with 5 save slots
+- **Auto-save**: Automatically saves after each round
 - **Complete Blackjack Rules**:
   - Hit and Stand actions
   - Blackjack detection
   - Dealer AI (hits on 16 or less, stands on 17+)
   - Automatic shuffling when deck is low
   - Push detection for ties
+  - Statistics tracking (wins, losses, pushes)
 
 ## Project Structure
 
@@ -20,6 +24,7 @@ A fully functional Blackjack game built with C++ using the MVC (Model-View-Contr
 blackjack_cpp/
 ├── CMakeLists.txt           # CMake build configuration
 ├── README.md                # This file
+├── ARCHITECTURE.md          # Detailed architecture documentation
 ├── include/
 │   ├── core/
 │   │   ├── Entity.hpp      # Base class for all game entities
@@ -29,100 +34,109 @@ blackjack_cpp/
 │   │   ├── Card.hpp        # Playing card representation
 │   │   ├── Deck.hpp        # Card deck management
 │   │   ├── Hand.hpp        # Player/dealer hand
-│   │   └── GameModel.hpp   # Main game model
+│   │   ├── GameModel.hpp   # Main game model
+│   │   ├── MenuModel.hpp   # Main menu model
+│   │   ├── SaveData.hpp    # Save data serialization
+│   │   └── SaveManager.hpp # File I/O for save/load
 │   ├── views/
 │   │   ├── View.hpp        # Base class for all views
-│   │   └── GameView.hpp    # Game rendering view
+│   │   ├── GameView.hpp    # Game rendering view
+│   │   └── MenuView.hpp    # Main menu rendering
 │   └── controllers/
 │       ├── Controller.hpp  # Base class for all controllers
-│       └── GameController.hpp # Input handling controller
-└── src/
-    ├── core/
-    │   ├── Game.cpp        # Game implementation
-    │   └── Entity.cpp      # Entity static member initialization
-    ├── models/
-    │   ├── Card.cpp        # Card implementation
-    │   ├── Deck.cpp        # Deck implementation
-    │   ├── Hand.cpp        # Hand implementation
-    │   └── GameModel.cpp   # Game model implementation
-    ├── views/
-    │   └── GameView.cpp    # Game view implementation
-    ├── controllers/
-    │   └── GameController.cpp # Controller implementation
-    └── main.cpp            # Entry point
+│       ├── GameController.hpp # Game input handling
+│       └── MenuController.hpp # Menu input handling
+├── src/
+│   ├── core/
+│   │   ├── Game.cpp        # Game implementation
+│   │   └── Entity.cpp      # Entity static member initialization
+│   ├── models/
+│   │   ├── Card.cpp        # Card implementation
+│   │   ├── Deck.cpp        # Deck implementation
+│   │   ├── Hand.cpp        # Hand implementation
+│   │   ├── GameModel.cpp   # Game model implementation
+│   │   ├── MenuModel.cpp   # Menu model implementation
+│   │   ├── SaveData.cpp    # Save data implementation
+│   │   └── SaveManager.cpp # Save manager implementation
+│   ├── views/
+│   │   ├── GameView.cpp    # Game view implementation
+│   │   └── MenuView.cpp    # Menu view implementation
+│   ├── controllers/
+│   │   ├── GameController.cpp # Controller implementation
+│   │   └── MenuController.cpp # Menu controller implementation
+│   └── main.cpp            # Entry point
+├── build.bat               # Windows build script
+├── build-raylib.bat        # Raylib library build script
+└── build.sh                # Linux/macOS build script
 ```
 
 ## Setup Instructions
 
 ### Prerequisites
 
-- CMake 3.10 or higher
-- C++17 compatible compiler (GCC, Clang, or MSVC)
-- Git (for cloning raylib)
+- GCC with C++17 support (or compatible compiler)
+- Make (optional, for using build.sh)
 
 ### Building on Windows
 
-1. Clone raylib into the external directory:
+1. Build the raylib library first:
 ```bash
-cd external
-git clone https://github.com/raysan5/raylib.git
+build-raylib.bat
 ```
 
-2. Create a build directory:
+2. Build the game:
 ```bash
-cd ..
-mkdir build
-cd build
+build.bat
 ```
 
-3. Generate build files with CMake:
+3. Run the game:
 ```bash
-cmake ..
-```
-
-4. Build the project:
-```bash
-cmake --build . --config Release
-```
-
-5. Run the game:
-```bash
-cd Release
-raylib_game.exe
+RaylibGame.exe
 ```
 
 ### Building on Linux/macOS
 
-1. Clone raylib into the external directory:
+1. Build raylib:
 ```bash
-cd external
-git clone https://github.com/raysan5/raylib.git
+mkdir -p obj_raylib
+gcc -c -std=c99 -O2 -w -DPLATFORM_DESKTOP -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include \
+    external/raylib/src/rcore.c -o obj_raylib/rcore.o
+gcc -c -std=c99 -O2 -w -DPLATFORM_DESKTOP -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include \
+    external/raylib/src/rshapes.c -o obj_raylib/rshapes.o
+gcc -c -std=c99 -O2 -w -DPLATFORM_DESKTOP -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include \
+    external/raylib/src/rtextures.c -o obj_raylib/rtextures.o
+gcc -c -std=c99 -O2 -w -DPLATFORM_DESKTOP -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include \
+    external/raylib/src/rtext.c -o obj_raylib/rtext.o
+gcc -c -std=c99 -O2 -w -DPLATFORM_DESKTOP -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include \
+    external/raylib/src/rmodels.c -o obj_raylib/rmodels.o
+gcc -c -std=c99 -O2 -w -DPLATFORM_DESKTOP -Iexternal/raylib/src -Iexternal/raylib/src/external/glfw/include \
+    external/raylib/src/raudio.c -o obj_raylib/raudio.o
+
+ar rcs libraylib.a obj_raylib/*.o
 ```
 
-2. Create and enter build directory:
+2. Build the game:
 ```bash
-cd ..
-mkdir build
-cd build
+build.sh
 ```
 
-3. Generate and build:
-```bash
-cmake ..
-make
-```
-
-4. Run the game:
+3. Run the game:
 ```bash
 ./RaylibGame
 ```
 
 ## Game Controls
 
-- **SPACE** - Start a new round / Continue after game over
+### Main Menu
+- **Arrow Up/Down** - Navigate menu options
+- **Enter** - Select option
+- **ESC** - Go back/Exit
+
+### During Game
 - **H** - Hit (draw another card)
 - **S** - Stand (end your turn)
-- **ESC** - Exit game
+- **Space** - Start new round
+- **ESC** - Return to main menu
 
 ## MVC Architecture Explanation
 
@@ -132,14 +146,19 @@ make
 - **Deck**: Manages a 52-card deck with shuffling
 - **Hand**: Represents a player's or dealer's hand with Blackjack value calculation
 - **GameModel**: Main game state manager handling game logic
+- **MenuModel**: Manages main menu state and navigation
+- **SaveData**: Structure for serializing game state
+- **SaveManager**: Handles file I/O for save/load operations
 
 ### View (views/)
 - **View**: Base class for all rendering components
 - **GameView**: Renders the game table, cards, UI elements, and messages
+- **MenuView**: Renders the main menu with selection highlighting
 
 ### Controller (controllers/)
 - **Controller**: Base class for input handling
-- **GameController**: Manages keyboard input and game state transitions
+- **GameController**: Manages keyboard input during gameplay
+- **MenuController**: Manages menu navigation and selection
 
 ### Core (core/)
 - **Game**: Singleton managing the main game loop and coordinating all components
@@ -153,6 +172,16 @@ make
 4. **Bust**: Exceeding 21 results in automatic loss
 5. **Push**: Tie game results in bet return (no wins/losses)
 6. **Deck Management**: Automatic reshuffle when cards remaining < 15
+
+## Save System
+
+The game features a comprehensive save system:
+
+- **5 Save Slots**: Each game state can be saved to any of 5 slots
+- **Auto-save**: Automatically saves after each completed round to slot 1
+- **Timestamp Display**: Each save slot shows when it was last saved
+- **Progress Saving**: Saves in-progress games with current hands
+- **Statistics**: Tracks wins, losses, and pushes across sessions
 
 ## Extending the Framework
 

@@ -4,7 +4,10 @@
 #include "models/Deck.hpp"
 #include "models/Hand.hpp"
 #include "models/Model.hpp"
+#include "models/SaveData.hpp"
+#include "models/SaveManager.hpp"
 #include <string>
+#include <memory>
 
 namespace game {
     namespace models {
@@ -93,7 +96,24 @@ namespace game {
             std::string getMessage() const { return m_message; }
             void setMessage(const std::string& message) { m_message = message; }
 
+            // Statistics getters
+            int getWins() const { return m_wins; }
+            int getLosses() const { return m_losses; }
+            int getPushes() const { return m_pushes; }
+            int getGamesPlayed() const { return m_wins + m_losses + m_pushes; }
+            float getWinRate() const {
+                int total = getGamesPlayed();
+                return total > 0 ? static_cast<float>(m_wins) / total : 0.0f;
+            }
+
+            // Save/Load functionality
+            bool saveGame(int slot = 1);
+            bool loadGame(int slot = 1);
+            std::shared_ptr<SaveManager> getSaveManager() { return m_saveManager; }
+
         private:
+            std::shared_ptr<SaveManager> m_saveManager;
+
             GameState m_state;
             std::shared_ptr<Deck> m_deck;
             std::shared_ptr<Hand> m_playerHand;

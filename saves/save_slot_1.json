@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "saveTime": 1780466030,
+  "wins": 0,
+  "losses": 1,
+  "pushes": 1,
+  "inProgress": false,
+  "deckCardCount": 52,
+  "playerHand": {
+    "cards": []
+  },
+  "dealerHand": {
+    "cards": []
+  }
+}
